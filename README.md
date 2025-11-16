@@ -1,317 +1,115 @@
-# Лабораторна робота №1. Створення найпростішого веб-сервера на основі nginx
 
-## Студентка: Ткачук Евеліна  
-## Група: ІПЗ-32  
+# Lab 2 — HTTP Client (Spotify Web API)
 
----
-
-## Мета роботи
-
-Ознайомлення з веб-сервером nginx, навчитися встановлювати та запускати сервер, налаштувати відображення статичного веб-сайту з використанням конфігураційних директив та маршрутизацією запитів.
+## 1. Мета роботи
+Отримати навички роботи з OAuth 2.0 Client Credentials Flow, виконання HTTP‑запитів та обробки даних Spotify Web API.
 
 ---
 
-## Налаштування середовища
+## 2. Опис API
 
-- **ОС:** Linux (Ubuntu)
-- **Веб-сервер:** nginx
-- **Мова розмітки:** HTML
-- **Мова стилізації:** CSS
-- **Система контролю версій:** Git
+### 2.1. Spotify Web API
+Spotify Web API — REST API для отримання інформації про артистів, альбоми, треки.  
+Документація: https://developer.spotify.com/documentation/web-api
 
 ---
 
-# Крок 1. Встановлення nginx
+## 2.2. Реєстрація застосунку
 
-Встановила веб-сервер nginx та перевірила його статус.
-
-**Команди:**
-```bash
-sudo apt update
-sudo apt install nginx
-sudo service nginx start
-sudo service nginx status
-зупинила роботу apache2, тому що на ньому я працюю в проектах на drupal
-```
-
-**Результат:**
-![1](screenshots/1.png)
-
-nginx успішно встановлено та запущено на порту 80.
+Створено застосунок **Lab2HTTPClient** у Spotify Developer Dashboard.  
+Було отримано:  
+- Client ID  
+- Client Secret  
 
 ---
 
-# Крок 2. Створення структури проекту
+## 2.3. Скріншоти
 
-Створила папку проекту та необхідні файли для веб-сайту.
+### 1. Основна інформація застосунку  
+![1](screenshots/Screenshot from 2025-11-16 14-15-35.png)
 
-**Команди:**
-```bash
-cd ~
-mkdir mysite
-cd mysite
-pwd
-```
+### 2. Отримання Access Token  
+![2](screenshots/Screenshot from 2025-11-16 14-16-09.png)
 
-**Результат структури проекту:**
-![2](screenshots/2.png)
+### 3. Інформація про артиста  
+![3](screenshots/Screenshot from 2025-11-16 14-16-27.png)
 
-Папка проекту: `/home/evelina/mysite`
+### 4. Пошук треків та вивід результатів  
+![4](screenshots/Screenshot from 2025-11-16 14-27-16.png)
 
 ---
 
-# Крок 3. Створення HTML та CSS файлів
+## 3. Код програми
 
-Створила файл `index.html` з заголовком та параграфом, а також файл `styles.css` для стилізації.
+```python
+import requests
+import base64
+import pandas as pd
 
-**Файл index.html:**
-```html
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css">
-    <title>Мій сервер на nginx</title>
-</head>
-<body>
-    <h1>Мій перший сервер на nginx!</h1>
-    <p>Це працює! 🚀</p>
-</body>
-</html>
-```
+CLIENT_ID = "ВАШ_CLIENT_ID"
+CLIENT_SECRET = "ВАШ_CLIENT_SECRET"
 
-**Файл styles.css:**
-```css
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f0f0f0;
-    padding: 20px;
-    margin: 0;
-}
+def get_access_token():
+    url = "https://accounts.spotify.com/api/token"
+    auth_str = f"{CLIENT_ID}:{CLIENT_SECRET}"
+    b64_auth = base64.b64encode(auth_str.encode()).decode()
 
-h1 {
-    color: #333;
-    font-size: 2.5em;
-}
+    headers = {"Authorization": f"Basic {b64_auth}"}
+    data = {"grant_type": "client_credentials"}
+    response = requests.post(url, headers=headers, data=data)
+    return response.json().get("access_token")
 
-p {
-    color: #666;
-    font-size: 1.2em;
-}
-```
+def get_artist_info(token, artist_id):
+    url = f"https://api.spotify.com/v1/artists/{artist_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    return requests.get(url, headers=headers).json()
 
-**Результат:**
-![3](screenshots/3.png)
+def search_tracks(token, query):
+    url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=5"
+    headers = {"Authorization": f"Bearer {token}"}
+    return requests.get(url, headers=headers).json()
 
-Файли index.html та styles.css успішно створено.
+def save_to_csv(data):
+    tracks = []
+    for item in data["tracks"]["items"]:
+        tracks.append({
+            "name": item["name"],
+            "artist": item["artists"][0]["name"],
+            "album": item["album"]["name"],
+            "popularity": item["popularity"]
+        })
 
----
+    df = pd.DataFrame(tracks)
+    df.to_csv("tracks.csv", index=False)
+    print("CSV-файл 'tracks.csv' створено!")
 
-# Крок 4. Налаштування конфігурації nginx
+def main():
+    token = get_access_token()
+    print("== ACCESS TOKEN ОТРИМАНО ==")
+    print(token)
 
-Відредагувала файл `/etc/nginx/nginx.conf` для налаштування веб-сервера.
+    artist = get_artist_info(token, "1Xyo4u8uXC1ZmMpatF05PJ")
+    print("\n=== ІНФОРМАЦІЯ ПРО АРТИСТА ===")
+    print("Ім'я:", artist["name"])
+    print("Популярність:", artist["popularity"])
+    print("Підписники:", artist["followers"]["total"])
 
-**Конфігурація nginx.conf:**
-```nginx
-user www-data;
-worker_processes auto;
-pid /run/nginx.pid;
+    result = search_tracks(token, "blinding lights")
+    save_to_csv(result)
 
-events {
-    worker_connections 768;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
-
-    gzip on;
-
-    server {
-        listen 80;
-        root /home/evelina/mysite;
-        index index.html;
-
-        location / {
-            try_files $uri $uri/ =404;
-        }
-
-        location /about {
-            try_files $uri $uri/ =404;
-        }
-
-        location /gallery {
-            try_files /gallery/photos.html /index.html =404;
-        }
-    }
-}
-```
-
-**Перевірка синтаксису:**
-```bash
-sudo nginx -t
-```
-
-**Запуск сервера:**
-```bash
-sudo service nginx restart
-```
-
-**Результат конфігурації:**
-![4](screenshots/4.png)
-
-Конфігурація nginx успішно налаштована і перевірена.
-
----
-
-# Крок 5. Тестування головної сторінки
-
-Перевірила роботу головної сторінки за адресою http://localhost/
-
-**Результат:**
-![5](screenshots/5.png)
-
-Головна сторінка відображається коректно з HTML вмістом та CSS стилями.
-
----
-
-# Крок 6. Створення піддиректорії about
-
-Створила папку `about` з файлом `index.html` для демонстрації роботи з піддиректоріями.
-
-**Команда:**
-```bash
-mkdir -p /home/evelina/mysite/about
-```
-
-**Файл /about/index.html:**
-```html
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <link rel="stylesheet" href="../styles.css">
-    <title>Про нас</title>
-</head>
-<body>
-    <h1>Сторінка About</h1>
-    <p>Це піддиректорія /about</p>
-    <a href="/">Назад на головну</a>
-</body>
-</html>
-```
-
-**Тестування:**
-![6](screenshots/6.png)
-
-Сторінка `/about/` відображається коректно за адресою http://localhost/about/
-
----
-
-# Крок 7. Створення піддиректорії gallery з альтернативним файлом
-
-Створила папку `gallery` з файлом `photos.html` (не index.html) для демонстрації директиви `try_files`.
-
-**Команда:**
-```bash
-mkdir -p /home/evelina/mysite/gallery
-```
-
-**Файл /gallery/photos.html:**
-```html
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <link rel="stylesheet" href="../styles.css">
-    <title>Галерея</title>
-</head>
-<body>
-    <h1>Галерея фото</h1>
-    <p>Це альтернативний файл замість index.html</p>
-    <a href="/">Назад на головну</a>
-</body>
-</html>
-```
-
-**Тестування:**
-![7](screenshots/7.png)
-
-Сторінка `/gallery/` відображається коректно за адресою http://localhost/gallery/ завдяки директиві `try_files`.
-
----
-
-# Крок 8. Завантаження на GitHub
-
-Ініціалізувала Git репозиторій та завантажив проект на GitHub.
-
-**Команди:**
-```bash
-cd /home/evelina/mysite
-git init
-git add .
-git commit -m "Lab 1: nginx web server with static content and routing"
-git remote add origin https://github.com/your_username/mysite.git
-git branch -M main
-git push -u origin main
-```
-
-**Результат:**
-![8](screenshots/8.png)
-
-Проект успішно завантажено на GitHub.
-
----
-
-# Остаточна структура проекту
-
-**Команда:**
-```bash
-ls -la /home/evelina/mysite/
-```
-
-**Результат:**
-![9](screenshots/9.png)
-
-**Структура проекту:**
-```
-/home/evelina/mysite/
-├── index.html           # Головна сторінка
-├── styles.css           # Стилі
-├── about/
-│   └── index.html       # Сторінка About
-├── gallery/
-│   └── photos.html      # Альтернативна сторінка Gallery
-├── screenshots/         # Папка зі скріншотами
-└── README.md            # Документація
+if __name__ == "__main__":
+    main()
 ```
 
 ---
 
-# Висновок
+## 4. Висновки
 
-Лабораторна робота успішно виконана. Я:
-
-Встановила та запустив веб-сервер nginx 
-Налаштувала конфігурацію nginx для обслуговування статичного контенту 
-Реалізувала роботу з піддиректоріями через директиву `location` 
-Використала директиву `try_files` для альтернативних файлів 
-Налаштувала MIME типи для коректного обслуговування різних типів файлів 
-Завантажила проект на GitHub 
-
-**Веб-сервер успішно функціонує і обслуговує статичний контент на порту 80.**
+У результаті роботи:
+- реалізовано авторизацію через OAuth 2.0 Client Credentials Flow;
+- отримано інформацію про артиста;
+- виконано пошук треків;
+- отримані дані збережено у CSV-файл;
+- підготовлено звіт з ілюстраціями.
 
 ---
-
-## Посилання
-
-- **GitHub репозиторій:** [https://github.com/evlinges/-.git]
-- **Адреса веб-сайту (локально):** http://localhost/
-
----
-
-**Дата завершення:** 2025-10-20
